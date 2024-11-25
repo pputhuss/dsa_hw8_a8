@@ -1,18 +1,15 @@
-# Compiler and flags
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
 
-# Source file and output executable
+TARGET = a8
 SRC = a8.c
-OUT = a8
+OBJ = $(SRC:.c=.o)
 
-# Default target
-all: $(OUT)
+$(TARGET): $(OBJ)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJ)
 
-# Build the executable
-$(OUT): $(SRC)
-	$(CC) $(CFLAGS) $(SRC) -o $(OUT)
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
-# Clean up build artifacts
 clean:
-	rm -f $(OUT)
+	rm -f $(OBJ) $(TARGET)
