@@ -3,210 +3,136 @@
 #include <limits.h>
 #include <string.h>
 
-#define MAX_VERTICES 1000
-#define MAX_PERIOD 100
+#define INF INT_MAX
 
+// Graph structure
 typedef struct {
-    int dest;
-    int* weights;
+    int vs, vt; // Source and target vertices
+    int *weights; // Periodic weights
 } Edge;
 
-typedef struct {
-    int vertices;
-    int period;
-    Edge* graph[MAX_VERTICES];
-    int graph_size[MAX_VERTICES];
-} PeriodicGraph;
-
-typedef struct {
-    int vertex;
-    int cost;
-    int step;
-    int* path;
-    int path_length;
-} State;
-
-// Heap implementation for priority queue
-typedef struct {
-    State* array;
-    int size;
-    int capacity;
-} PriorityQueue;
-
-// Utility comparison function for priority queue
-int compare_states(State a, State b) {
-    return a.cost > b.cost;
-}
-
-// Heap operations
-void swap(State* a, State* b) {
-    State temp = *a;
-    *a = *b;
-    *b = temp;
-}
-
-void heapify(PriorityQueue* pq, int index) {
-    int smallest = index;
-    int left = 2 * index + 1;
-    int right = 2 * index + 2;
-
-    if (left < pq->size && compare_states(pq->array[smallest], pq->array[left]))
-        smallest = left;
-
-    if (right < pq->size && compare_states(pq->array[smallest], pq->array[right]))
-        smallest = right;
-
-    if (smallest != index) {
-        swap(&pq->array[index], &pq->array[smallest]);
-        heapify(pq, smallest);
-    }
-}
-
-void push(PriorityQueue* pq, State state) {
-    if (pq->size == pq->capacity) return;
+// Dijkstra's Algorithm for dynamic weights
+void dijkstra(int V, int N, int **adjList, Edge **edges, int *edgeCount, int start, int end) {
+    int *dist = malloc(V * sizeof(int));
+    int *prev = malloc(V * sizeof(int));
+    int *visited = calloc(V, sizeof(int));
     
-    pq->array[pq->size] = state;
-    int current = pq->size;
-    pq->size++;
-
-    while (current > 0 && compare_states(pq->array[(current-1)/2], pq->array[current])) {
-        swap(&pq->array[current], &pq->array[(current-1)/2]);
-        current = (current-1)/2;
+    for (int i = 0; i < V; i++) {
+        dist[i] = INF;
+        prev[i] = -1;
     }
-}
+    dist[start] = 0;
 
-State pop(PriorityQueue* pq) {
-    if (pq->size <= 0) {
-        State empty = {0};
-        return empty;
-    }
-
-    State root = pq->array[0];
-    pq->array[0] = pq->array[pq->size - 1];
-    pq->size--;
-    heapify(pq, 0);
-
-    return root;
-}
-
-int* find_shortest_path(PeriodicGraph* graph, int start, int end) {
-    int dist[MAX_VERTICES][MAX_PERIOD][MAX_PERIOD];
-    memset(dist, 0x3f, sizeof(dist));
-
-    PriorityQueue pq;
-    pq.array = malloc(MAX_VERTICES * MAX_PERIOD * sizeof(State));
-    pq.size = 0;
-    pq.capacity = MAX_VERTICES * MAX_PERIOD;
-
-    int* initial_path = malloc(sizeof(int));
-    initial_path[0] = start;
-
-    State initial_state = {start, 0, 0, initial_path, 1};
-    push(&pq, initial_state);
-    dist[start][0][0] = 0;
-
-    while (pq.size > 0) {
-        State current = pop(&pq);
-
-        if (current.vertex == end) {
-            return current.path;
+    for (int i = 0; i < V; i++) {
+        int u = -1;
+        for (int j = 0; j < V; j++) {
+            if (!visited[j] && (u == -1 || dist[j] < dist[u]))
+                u = j;
         }
+        
+        if (dist[u] == INF) break;
+        visited[u] = 1;
 
-        for (int i = 0; i < graph->graph_size[current.vertex]; i++) {
-            Edge* edge = &graph->graph[current.vertex][i];
-            int next = edge->dest;
-            int new_step = (current.step + 1) % graph->period;
-            int edge_cost = edge->weights[current.step];
-            int new_cost = current.cost + edge_cost;
+        for (int j = 0; j < edgeCount[u]; j++) {
+            Edge edge = edges[u][j];
+            int v = edge.vt;
+            int weight = edge.weights[dist[u] % N];
 
-            if (new_cost < dist[next][new_step][new_step]) {
-                dist[next][new_step][new_step] = new_cost;
-
-                int* new_path = malloc((current.path_length + 1) * sizeof(int));
-                memcpy(new_path, current.path, current.path_length * sizeof(int));
-                new_path[current.path_length] = next;
-
-                State new_state = {
-                    next, 
-                    new_cost, 
-                    new_step, 
-                    new_path, 
-                    current.path_length + 1
-                };
-                push(&pq, new_state);
-
-                free(current.path);
+            if (dist[u] + weight < dist[v]) {
+                dist[v] = dist[u] + weight;
+                prev[v] = u;
             }
         }
     }
 
-    return NULL;
+    // Output the shortest path
+    if (dist[end] == INF) {
+        printf("No path found\n");
+    } else {
+        int *path = malloc(V * sizeof(int));
+        int pathIndex = 0;
+        for (int at = end; at != -1; at = prev[at]) {
+            path[pathIndex++] = at;
+        }
+        for (int i = pathIndex - 1; i >= 0; i--) {
+            printf("%d%s", path[i], i > 0 ? " " : "\n");
+        }
+        free(path);
+    }
+
+    free(dist);
+    free(prev);
+    free(visited);
 }
 
-void read_graph(PeriodicGraph* graph, const char* filename) {
-    FILE* file = fopen(filename, "r");
+
+// Read graph from file
+void readGraph(const char *filename, int *V, int *N, int ***adjList, Edge ***edges, int **edgeCount) {
+    FILE *file = fopen(filename, "r");
     if (!file) {
-        fprintf(stderr, "Cannot open file: %s\n", filename);
-        exit(1);
+        perror("Error opening file");
+        exit(EXIT_FAILURE);
     }
 
-    fscanf(file, "%d %d", &graph->vertices, &graph->period);
+    fscanf(file, "%d %d", V, N);
 
-    int source, dest;
-    for (int i = 0; i < graph->vertices; i++) {
-        graph->graph_size[i] = 0;
-        graph->graph[i] = malloc(graph->vertices * sizeof(Edge));
+    *adjList = malloc(*V * sizeof(int *));
+    *edges = malloc(*V * sizeof(Edge *));
+    *edgeCount = calloc(*V, sizeof(int));
+
+    for (int i = 0; i < *V; i++) {
+        (*adjList)[i] = NULL;
+        (*edges)[i] = NULL;
     }
 
-    while (fscanf(file, "%d %d", &source, &dest) == 2) {
-        Edge* edge = &graph->graph[source][graph->graph_size[source]];
-        edge->dest = dest;
-        edge->weights = malloc(graph->period * sizeof(int));
-        
-        for (int i = 0; i < graph->period; i++) {
-            fscanf(file, "%d", &edge->weights[i]);
+    int vs, vt;
+    while (fscanf(file, "%d %d", &vs, &vt) != EOF) {
+        Edge edge;
+        edge.vs = vs;
+        edge.vt = vt;
+        edge.weights = malloc(*N * sizeof(int));
+        for (int i = 0; i < *N; i++) {
+            fscanf(file, "%d", &edge.weights[i]);
         }
-        graph->graph_size[source]++;
+
+        (*edgeCount)[vs]++;
+        (*edges)[vs] = realloc((*edges)[vs], (*edgeCount)[vs] * sizeof(Edge));
+        (*edges)[vs][(*edgeCount)[vs] - 1] = edge;
     }
 
     fclose(file);
 }
 
-int main(int argc, char* argv[]) {
+// Free memory allocated for the graph
+void freeGraph(int V, int **adjList, Edge **edges, int *edgeCount) {
+    for (int i = 0; i < V; i++) {
+        for (int j = 0; j < edgeCount[i]; j++) {
+            free(edges[i][j].weights);
+        }
+        free(edges[i]);
+    }
+    free(adjList);
+    free(edges);
+    free(edgeCount);
+}
+
+int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <graph_file>\n", argv[0]);
-        return 1;
+        return EXIT_FAILURE;
     }
 
-    PeriodicGraph graph;
-    read_graph(&graph, argv[1]);
+    int V, N;
+    int **adjList, *edgeCount;
+    Edge **edges;
+
+    readGraph(argv[1], &V, &N, &adjList, &edges, &edgeCount);
 
     int start, end;
     while (scanf("%d %d", &start, &end) == 2) {
-        int* path = find_shortest_path(&graph, start, end);
-        
-        if (path) {
-            int length = 0;
-            while (path[length] != end) length++;
-            length++;
-
-            for (int i = 0; i < length; i++) {
-                printf("%d", path[i]);
-                if (i < length - 1) printf(" ");
-            }
-            printf("\n");
-            
-            free(path);
-        }
+        dijkstra(V, N, adjList, edges, edgeCount, start, end);
     }
 
-    // Free allocated memory
-    for (int i = 0; i < graph.vertices; i++) {
-        for (int j = 0; j < graph.graph_size[i]; j++) {
-            free(graph.graph[i][j].weights);
-        }
-        free(graph.graph[i]);
-    }
-
+    freeGraph(V, adjList, edges, edgeCount);
     return 0;
 }
